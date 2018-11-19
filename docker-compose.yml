@@ -1,0 +1,58 @@
+version: '2'
+
+services:
+
+    httpd:
+      image: httpd:2.4
+      ports:
+        - "80:80"
+        - "443:443"
+      volumes:
+        - ./dockerfiles/conf/ssl/ssl-cert-mylocalmachine.pem:/etc/ssl/certs/ssl-cert-mylocalmachine.pem
+        - ./dockerfiles/conf/ssl/ssl-cert-mylocalmachine.key:/etc/ssl/private/ssl-cert-mylocalmachine.key
+        - ./dockerfiles/conf/httpd.conf:/usr/local/apache2/conf/httpd.conf
+        - ./dockerfiles/conf/vhosts:/usr/local/apache2/conf/vhosts
+        - ./dockerfiles/apachelogs:/usr/local/apache2/logs
+      volumes_from:
+        - web
+
+    web:
+        user: ${USER_NAME}:${GROUP_NAME}
+        build:
+            context: .
+            args:
+                DOCKER_NAT_IP: ${DOCKER_NAT_IP}
+                TIMEZONE: ${TIMEZONE}
+                USER_NAME: ${USER_NAME}
+                USER_UID: ${USER_UID}
+                GROUP_NAME: ${GROUP_NAME}
+                GROUP_UID: ${GROUP_UID}
+        expose:
+            - "9000"
+            - "9001"
+        volumes:
+            - .:/usr/local/apache2/htdocs
+            # Mount an empty folder to remove dockerfiles from htdocs
+            #- /usr/local/apache2/htdocs/dockerfiles/
+        links:
+            - db:db
+
+    db:
+        image: mysql:5.5
+        volumes:
+            - ./dockerfiles/mysql:/var/lib/mysql
+            - ./dockerfiles/conf/mysqld_charset.cnf:/etc/mysql/conf.d/mysqld_charset.cnf
+        ports:
+            - "3306:3306"
+        environment:
+            MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+            MYSQL_DATABASE: ${MYSQL_DATABASE}
+            MYSQL_USER: ${MYSQL_USER}
+            MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+    phpmyadmin:
+        image: phpmyadmin/phpmyadmin:4.6
+        ports:
+            - "8080:80"
+        links:
+            - db:db

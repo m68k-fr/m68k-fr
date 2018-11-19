@@ -1,0 +1,63 @@
+# Project language
+language: php
+
+# Allows use container-based infrastructure
+sudo: false
+
+# Start mysql service
+services:
+  - mysql
+
+# Cache composer packages so "composer install" is faster
+cache:
+  directories:
+    - $HOME/.composer/cache/files
+    - ./bin/.phpunit
+
+# Define an environment variable
+env:
+  - SYMFONY_VERSION="3.0.*" DB=mysql
+
+# Matrix to test in every php version
+matrix:
+  # Fast finish allows to set the build as "finished" even if the "allow_failures" matrix elements are not finished yet.
+  fast_finish: true
+  include:
+    - php: 7.1
+    - php: 7.0
+
+before_install:
+  - composer self-update
+
+
+# Install composer dependencies,
+# Create database, schema and fixtures
+install:
+  - composer install
+  - cp app/config/parameters.yml.dist app/config/parameters.yml
+  - yarn install
+  - yarn encore dev
+  - php bin/console doctrine:database:create --env=test
+  - php bin/console doctrine:schema:create --env=test
+  - php bin/console doctrine:fixtures:load -n --env=test
+  - php bin/console cache:clear --env=test
+
+script:
+  - ./vendor/bin/simple-phpunit
+  # this checks that the source code follows the Symfony Code Syntax rules
+  - ./vendor/bin/php-cs-fixer fix --diff --dry-run -v
+  # this checks that the YAML config files contain no syntax errors
+  - php bin/console lint:yaml ./app/config
+  # this checks that the Twig template files contain no syntax errors
+  - php bin/console lint:twig ./app/Resources/views
+  # this checks that the XLIFF translations contain no syntax errors
+  #- ./bin/console lint:xliff translations
+  # this checks that the application doesn't use dependencies with known security vulnerabilities
+  - php bin/console security:check --end-point=http://security.sensiolabs.org/check_lock
+  # this checks that the composer.json and composer.lock files are valid
+  - composer validate --strict
+  # this checks that Doctrine's mapping configurations are valid
+  - php bin/console doctrine:schema:validate --skip-sync -vvv --no-interaction
+
+after_failure:
+- cat var/logs/*.log
